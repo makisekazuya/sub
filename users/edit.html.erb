@@ -1,0 +1,5 @@
+<% if @user.released? %>
+  <%= link_to '非公開にする',"/users/nonrelease/#{@user.id}", method: :patch%>
+<% else %>
+  <%= link_to '公開する',"/users/release/#{@user.id}", method: :patch%>
+<% end %>

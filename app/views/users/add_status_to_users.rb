@@ -1,0 +1,1 @@
+enum status:{nonreleased: 0, released: 1}
