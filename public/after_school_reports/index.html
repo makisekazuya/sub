@@ -1,0 +1,733 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>業務日報ダッシュボード</title>
+  <style>
+    :root {
+      --accent: #2c7be5;
+      --gray: #f5f7fb;
+      --border: #dce3ed;
+    }
+    body { font-family: "Noto Sans JP", system-ui, sans-serif; margin: 0; background: var(--gray); color: #123; }
+    header { background: #fff; padding: 16px 24px; border-bottom: 1px solid var(--border); position: sticky; top: 0; z-index: 3; }
+    h1 { margin: 0; font-size: 22px; }
+    .container { padding: 16px 24px 64px; }
+    .card { background: #fff; border: 1px solid var(--border); border-radius: 12px; padding: 16px; margin-bottom: 16px; box-shadow: 0 2px 6px rgba(0,0,0,0.04); }
+    .grid { display: grid; gap: 12px; }
+    .grid.offices { grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); }
+    .button { display: inline-flex; align-items: center; gap: 6px; background: var(--accent); color: #fff; padding: 8px 12px; border-radius: 8px; border: none; cursor: pointer; font-weight: 600; }
+    .button.secondary { background: #fff; color: #123; border: 1px solid var(--border); }
+    .toolbar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
+    table { width: 100%; border-collapse: collapse; }
+    th, td { border: 1px solid var(--border); padding: 6px 8px; background: #fff; }
+    th { background: #eef2f7; position: sticky; top: 0; z-index: 2; }
+    .scrollable { max-height: 320px; overflow: auto; border: 1px solid var(--border); border-radius: 8px; }
+    .hidden { display: none; }
+    .section-title { margin: 12px 0 8px; font-weight: 700; }
+    .badge { display: inline-block; padding: 2px 8px; border-radius: 999px; background: #eef2f7; border: 1px solid var(--border); font-size: 12px; }
+    .flex { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+    .input { padding: 6px 8px; border: 1px solid var(--border); border-radius: 6px; }
+    .muted { color: #6c7c94; font-size: 13px; }
+    textarea { width: 100%; min-height: 80px; padding: 8px; border-radius: 6px; border: 1px solid var(--border); }
+    .two-col { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>放課後等デイサービス 業務日報</h1>
+    <div class="muted">20 事業所分のカレンダーと日報を共通管理</div>
+  </header>
+  <div class="container">
+    <section id="office-list" class="card">
+      <div class="section-title">事業所一覧</div>
+      <div class="grid offices" id="officeGrid"></div>
+    </section>
+
+    <section id="calendar-section" class="card hidden">
+      <div class="toolbar">
+        <button class="button secondary" id="backToTop">トップに戻る</button>
+        <div id="currentOfficeLabel" class="badge"></div>
+      </div>
+      <div class="toolbar">
+        <button class="button secondary" id="prevMonth">◀ 前の月</button>
+        <div id="monthLabel" class="section-title" style="margin:0"></div>
+        <button class="button secondary" id="nextMonth">次の月 ▶</button>
+      </div>
+      <div id="calendarGrid" class="grid" style="grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 4px;"></div>
+    </section>
+
+    <section id="report-section" class="hidden">
+      <div class="toolbar">
+        <button class="button secondary" id="backToCalendar">カレンダーに戻る</button>
+        <div id="reportOfficeLabel" class="badge"></div>
+        <div id="reportDateLabel" class="badge"></div>
+        <button class="button" id="saveReport">保存</button>
+      </div>
+      <div class="card">
+        <div class="two-col">
+          <div>
+            <label>日付 <input class="input" id="reportDate" type="text" readonly></label>
+          </div>
+          <div>
+            <label>曜日 <input class="input" id="reportWeekday" type="text" readonly></label>
+          </div>
+          <div>
+            <label>天気 <input class="input" id="reportWeather" type="text" readonly></label>
+          </div>
+          <div>
+            <label>管理者 <input class="input" id="reportManager" placeholder="管理者氏名"></label>
+          </div>
+          <div>
+            <label>記録者 <input class="input" id="reportRecorder" placeholder="自動入力" ></label>
+          </div>
+          <div class="flex">
+            <label><input type="checkbox" id="holidayToggle"> 土祝日長期休暇モード</label>
+            <span class="muted">平日／土祝日長期休暇で時刻の自動入力を切り替え</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="section-title">利用児童一覧</div>
+        <div class="toolbar">
+          <button class="button secondary" id="addChildRow">行を追加</button>
+          <button class="button secondary" id="resetFromMaster">児童マスターデータで初期化</button>
+        </div>
+        <div class="scrollable">
+          <table id="childrenTable"></table>
+        </div>
+        <div class="section-title">集計</div>
+        <div class="grid" style="grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));">
+          <div class="card"><div class="muted">利用児童人数</div><div id="totalCount" class="section-title">0</div></div>
+          <div class="card"><div class="muted">放課後利用人数</div><div id="weekdayCount" class="section-title">0</div></div>
+          <div class="card"><div class="muted">休校日利用人数</div><div id="holidayCount" class="section-title">0</div></div>
+          <div class="card"><div class="muted">欠席人数</div><div id="absentCount" class="section-title">0</div></div>
+        </div>
+        <div class="grid" style="grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); margin-top:12px;">
+          <div>
+            <div class="muted">午前 活動内容</div>
+            <textarea id="amNotes"></textarea>
+          </div>
+          <div>
+            <div class="muted">午後 活動内容</div>
+            <textarea id="pmNotes"></textarea>
+          </div>
+          <div>
+            <div class="muted">特記事項</div>
+            <textarea id="specialNotes"></textarea>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="section-title">出勤職員一覧（シフト表連動）</div>
+        <div class="toolbar">
+          <button class="button secondary" id="refreshShifts">シフトを再取得</button>
+        </div>
+        <div class="scrollable">
+          <table id="staffTable"></table>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="section-title">送迎記録簿（迎え）</div>
+        <div class="scrollable"><table id="pickupTable"></table></div>
+        <div class="section-title">送迎記録簿（送り）</div>
+        <div class="scrollable"><table id="dropoffTable"></table></div>
+        <div class="toolbar">
+          <button class="button secondary" id="applyPickup">迎え時刻から開始時刻を自動設定（平日）</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="section-title">専門的支援実施加算記録</div>
+        <div class="toolbar">
+          <button class="button secondary" id="applyPractitioner">実施者を自動割当</button>
+        </div>
+        <div class="scrollable"><table id="supportTable"></table></div>
+        <div class="section-title">実施内容詳細</div>
+        <textarea id="supportDetails" placeholder="その日の全体的な専門的支援の所見を記録"></textarea>
+      </div>
+    </section>
+  </div>
+
+  <script>
+    const officeNames = Array.from({length: 20}).map((_, i) => `事業所${i+1}`);
+    const officeMaster = officeNames.map((name, index) => ({
+      id: index + 1,
+      name,
+      children: [
+        { name: `児童あ${index+1}`, school: 'はすだ小学校', grade: '1年' },
+        { name: `児童い${index+1}`, school: 'はすだ小学校', grade: '2年' },
+        { name: `児童う${index+1}`, school: 'はすだ小学校', grade: '3年' },
+        { name: `児童え${index+1}`, school: 'みずほ小学校', grade: '4年' },
+        { name: `児童お${index+1}`, school: 'みずほ小学校', grade: '5年' },
+        { name: `児童か${index+1}`, school: 'みずほ小学校', grade: '6年' },
+        { name: `児童き${index+1}`, school: '高砂中学校', grade: '1年' },
+        { name: `児童く${index+1}`, school: '高砂中学校', grade: '2年' }
+      ].sort((a,b)=>a.name.localeCompare(b.name, 'ja')),
+      staff: [
+        { name: `管理者${index+1}`, role: '管理者', schedule: 'daily' },
+        { name: `児発管${index+1}`, role: '児童発達支援管理責任者', schedule: 'monWedFri' },
+        { name: `保育士${index+1}`, role: '保育士等（5年以上）', schedule: 'weekdays' },
+        { name: `OT${index+1}`, role: '理学療法士・作業療法士', schedule: 'tueThu' },
+        { name: `児指${index+1}-A`, role: '児童指導員', schedule: 'daily' },
+        { name: `児指${index+1}-B`, role: '児童指導員', schedule: 'weekdays' },
+        { name: `指導員${index+1}`, role: '指導員（その他）', schedule: 'weekends' }
+      ]
+    }));
+
+    const storageKey = 'afterSchoolDailyReports';
+    const supportContents = ['ボールコントロール訓練','バランス訓練','体幹トレーニング','発声・リズム','ソーシャルスキルトレーニング','巧緻性','ジャンプ練習','ストレッチ','感覚統合','日常生活動作','コミュニケーション','読み書き']
+      .map((label, idx) => `${idx+1}:${label}`);
+    let currentOfficeId = null;
+    let currentDate = null;
+    let currentReport = null;
+    let currentMonth = new Date();
+
+    function initOffices() {
+      const grid = document.getElementById('officeGrid');
+      grid.innerHTML = '';
+      officeMaster.forEach(office => {
+        const card = document.createElement('div');
+        card.className = 'card';
+        card.innerHTML = `<div class="section-title">${office.name}</div><div class="muted">カレンダーを開く</div>`;
+        card.style.cursor = 'pointer';
+        card.onclick = () => openCalendar(office.id);
+        grid.appendChild(card);
+      });
+    }
+
+    function openCalendar(officeId) {
+      currentOfficeId = officeId;
+      document.getElementById('office-list').classList.add('hidden');
+      document.getElementById('calendar-section').classList.remove('hidden');
+      document.getElementById('report-section').classList.add('hidden');
+      document.getElementById('currentOfficeLabel').textContent = officeMaster.find(o=>o.id===officeId).name;
+      renderCalendar();
+    }
+
+    function renderCalendar() {
+      const grid = document.getElementById('calendarGrid');
+      grid.innerHTML = '';
+      const year = currentMonth.getFullYear();
+      const month = currentMonth.getMonth();
+      document.getElementById('monthLabel').textContent = `${year}年${month+1}月`;
+      const firstDay = new Date(year, month, 1);
+      const startWeekday = firstDay.getDay();
+      const daysInMonth = new Date(year, month+1, 0).getDate();
+      for (let i=0;i<startWeekday;i++) {
+        const blank = document.createElement('div');
+        grid.appendChild(blank);
+      }
+      for (let day=1; day<=daysInMonth; day++) {
+        const btn = document.createElement('button');
+        btn.className = 'button secondary';
+        btn.textContent = day;
+        btn.style.width = '100%';
+        btn.onclick = () => openReport(new Date(year, month, day));
+        grid.appendChild(btn);
+      }
+    }
+
+    function openReport(dateObj) {
+      currentDate = dateObj;
+      const dateStr = formatDate(dateObj);
+      document.getElementById('report-section').classList.remove('hidden');
+      document.getElementById('calendar-section').classList.add('hidden');
+      document.getElementById('reportOfficeLabel').textContent = officeMaster.find(o=>o.id===currentOfficeId).name;
+      document.getElementById('reportDateLabel').textContent = dateStr;
+      document.getElementById('reportDate').value = dateStr;
+      document.getElementById('reportWeekday').value = weekdayLabel(dateObj);
+      loadReport(dateStr);
+    }
+
+    function loadReport(dateStr) {
+      const all = JSON.parse(localStorage.getItem(storageKey) || '{}');
+      const officeKey = `office-${currentOfficeId}`;
+      currentReport = all[officeKey]?.[dateStr] || buildNewReport(dateStr);
+      document.getElementById('holidayToggle').checked = currentReport.mode === 'holiday';
+      document.getElementById('reportManager').value = currentReport.manager || '';
+      document.getElementById('reportWeather').value = currentReport.weather || '取得中...';
+      document.getElementById('reportRecorder').value = currentReport.recorder || '';
+      document.getElementById('amNotes').value = currentReport.amNotes || '';
+      document.getElementById('pmNotes').value = currentReport.pmNotes || '';
+      document.getElementById('specialNotes').value = currentReport.specialNotes || '';
+      document.getElementById('supportDetails').value = currentReport.supportDetails || '';
+      renderChildren();
+      renderStaff();
+      renderTransportTables();
+      renderSupportTable();
+      updateCounts();
+      fetchWeather(dateStr);
+    }
+
+    function buildNewReport(dateStr) {
+      const office = officeMaster.find(o=>o.id===currentOfficeId);
+      const mode = document.getElementById('holidayToggle').checked ? 'holiday' : 'weekday';
+      const children = office.children.map((child, index) => ({
+        id: `${child.name}-${dateStr}`,
+        name: child.name,
+        school: child.school,
+        grade: child.grade,
+        absent: false,
+        cancel: false,
+        service: '1',
+        start: mode === 'holiday' ? '09:50' : '15:30',
+        end: mode === 'holiday' ? '16:00' : '17:30',
+        pickup: false,
+        dropoff: false,
+        notes: mode === 'holiday' ? '延長支援加算＋60分' : '',
+        familySupport: '無',
+        proSupport: '無'
+      }));
+      return {
+        officeId: currentOfficeId,
+        date: dateStr,
+        weekday: weekdayLabel(currentDate),
+        weather: '',
+        manager: '',
+        recorder: '',
+        mode,
+        amNotes: '',
+        pmNotes: '',
+        specialNotes: '',
+        children,
+        staff: buildStaffFromShift(dateStr),
+        transport: buildEmptyTransport(),
+        supportDetails: '',
+        supportItems: buildSupportItems(children)
+      };
+    }
+
+    function buildEmptyTransport() {
+      return {
+        pickup: Array.from({length:5}).map((_,i)=>({ car: i+1, leader:'', time:'', place:'', children:'', memo:'' })),
+        dropoff: Array.from({length:5}).map((_,i)=>({ car: i+1, leader:'', time:'', place:'', children:'', memo:'' }))
+      };
+    }
+
+    function weekdayLabel(dateObj) {
+      return ['日','月','火','水','木','金','土'][dateObj.getDay()];
+    }
+
+    function formatDate(dateObj) {
+      const m = dateObj.getMonth()+1;
+      const d = dateObj.getDate();
+      return `${dateObj.getFullYear()}-${String(m).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+    }
+
+    function saveReportToStorage() {
+      const all = JSON.parse(localStorage.getItem(storageKey) || '{}');
+      const officeKey = `office-${currentOfficeId}`;
+      all[officeKey] = all[officeKey] || {};
+      all[officeKey][currentReport.date] = currentReport;
+      localStorage.setItem(storageKey, JSON.stringify(all));
+      alert('保存しました');
+    }
+
+    function renderChildren() {
+      const table = document.getElementById('childrenTable');
+      const headers = ['#','名前','欠席','キャンセル','提供形態','開始','終了','迎え','送り','備考'];
+      table.innerHTML = `<thead><tr>${headers.map(h=>`<th>${h}</th>`).join('')}</tr></thead>`;
+      const tbody = document.createElement('tbody');
+      currentReport.children.forEach((child, index) => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td>${index+1}</td>
+          <td>
+            <select class="input" data-field="name" data-index="${index}">${officeMaster.find(o=>o.id===currentOfficeId).children.map(c=>`<option ${c.name===child.name?'selected':''}>${c.name}</option>`).join('')}</select>
+            <div class="muted">${child.school} / ${child.grade}</div>
+          </td>
+          <td><input type="checkbox" data-field="absent" data-index="${index}" ${child.absent?'checked':''}></td>
+          <td><input type="checkbox" data-field="cancel" data-index="${index}" ${child.cancel?'checked':''}></td>
+          <td><input class="input" data-field="service" data-index="${index}" value="${child.service}"></td>
+          <td><input type="time" class="input" data-field="start" data-index="${index}" value="${child.start}"></td>
+          <td><input type="time" class="input" data-field="end" data-index="${index}" value="${child.end}"></td>
+          <td><input type="checkbox" data-field="pickup" data-index="${index}" ${child.pickup?'checked':''}></td>
+          <td><input type="checkbox" data-field="dropoff" data-index="${index}" ${child.dropoff?'checked':''}></td>
+          <td>
+            <div class="flex">
+              <label>家族支援加算 <select class="input" data-field="familySupport" data-index="${index}"><option ${child.familySupport==='無'?'selected':''}>無</option><option ${child.familySupport==='有'?'selected':''}>有</option></select></label>
+              <label>専門的支援実施加算 <select class="input" data-field="proSupport" data-index="${index}"><option ${child.proSupport==='無'?'selected':''}>無</option><option ${child.proSupport==='有'?'selected':''}>有</option></select></label>
+            </div>
+            <div class="muted">欠席時は連絡日と理由を備考に追記します</div>
+            <input class="input" data-field="notes" data-index="${index}" value="${child.notes||''}">
+            <div class="flex" data-absent-extra="${index}" style="margin-top:6px; ${child.absent?'':'display:none;'}">
+              <label>連絡日
+                <select class="input" data-field="contactDate" data-index="${index}">
+                  ${buildContactDateOptions(currentReport.date, child.contactDate)}
+                </select>
+              </label>
+              <label>理由
+                <select class="input" data-field="reason" data-index="${index}">
+                  ${['体調不良','家庭の都合','学校行事','行き渋り'].map(r=>`<option ${child.reason===r?'selected':''}>${r}</option>`).join('')}
+                </select>
+              </label>
+            </div>
+          </td>
+        `;
+        tbody.appendChild(tr);
+      });
+      table.appendChild(tbody);
+      table.querySelectorAll('input, select').forEach(el => {
+        el.onchange = handleChildChange;
+      });
+    }
+
+    function buildContactDateOptions(dateStr, selected) {
+      const base = new Date(dateStr);
+      return Array.from({length:4}).map((_,i)=>{
+        const d = new Date(base);
+        d.setDate(base.getDate()-i);
+        const optionVal = formatDate(d);
+        return `<option value="${optionVal}" ${selected===optionVal?'selected':''}>${optionVal}</option>`;
+      }).join('');
+    }
+
+    function handleChildChange(event) {
+      const index = Number(event.target.dataset.index);
+      const field = event.target.dataset.field;
+      const child = currentReport.children[index];
+      if (!child) return;
+      if (event.target.type === 'checkbox') {
+        child[field] = event.target.checked;
+      } else {
+        child[field] = event.target.value;
+      }
+      if (field === 'name') {
+        const master = officeMaster.find(o=>o.id===currentOfficeId).children.find(c=>c.name===child.name);
+        if (master) {
+          child.school = master.school;
+          child.grade = master.grade;
+        }
+        if (currentReport.supportItems[index]) {
+          currentReport.supportItems[index].name = child.name;
+        }
+      }
+      if (field === 'absent') {
+        const extra = document.querySelector(`[data-absent-extra="${index}"]`);
+        if (event.target.checked) {
+          extra.style.display = '';
+          child.notes = `${child.notes || ''} 連絡日:${child.contactDate || currentReport.date} 理由:${child.reason || '体調不良'}`.trim();
+        } else {
+          extra.style.display = 'none';
+        }
+      }
+      if (field === 'contactDate' || field === 'reason') {
+        child.notes = `${child.notes || ''} 連絡日:${child.contactDate || currentReport.date} 理由:${child.reason || '体調不良'}`.trim();
+      }
+      child.familySupport = child.familySupport || '無';
+      child.proSupport = child.proSupport || '無';
+      child.notes = `${child.notes || ''}`.trim();
+      updateCounts();
+      renderSupportTable();
+    }
+
+    function updateCounts() {
+      const active = currentReport.children.filter(c=>!c.absent && !c.cancel).length;
+      const absents = currentReport.children.filter(c=>c.absent).length;
+      const weekdayUse = currentReport.mode === 'weekday' ? active : 0;
+      const holidayUse = currentReport.mode === 'holiday' ? active : 0;
+      document.getElementById('totalCount').textContent = active;
+      document.getElementById('absentCount').textContent = absents;
+      document.getElementById('weekdayCount').textContent = weekdayUse;
+      document.getElementById('holidayCount').textContent = holidayUse;
+    }
+
+    function buildStaffFromShift(dateStr) {
+      const date = new Date(dateStr);
+      const weekday = date.getDay();
+      const office = officeMaster.find(o=>o.id===currentOfficeId);
+      const isWeekend = weekday === 0 || weekday === 6;
+      const staff = office.staff.filter(member => {
+        switch(member.schedule) {
+          case 'daily': return true;
+          case 'weekdays': return weekday >=1 && weekday <=5;
+          case 'weekends': return isWeekend;
+          case 'tueThu': return weekday === 2 || weekday === 4;
+          case 'monWedFri': return [1,3,5].includes(weekday);
+          default: return false;
+        }
+      }).map(m=>({ ...m }));
+      return staff;
+    }
+
+    function renderStaff() {
+      const table = document.getElementById('staffTable');
+      const grouped = {};
+      currentReport.staff.forEach(member => {
+        grouped[member.role] = grouped[member.role] || [];
+        grouped[member.role].push(member.name);
+      });
+      const rows = Object.keys(grouped).map(role => {
+        return `<tr><th>${role}</th><td>${grouped[role].length}</td><td>${grouped[role].join('、')}</td></tr>`;
+      }).join('');
+      table.innerHTML = `<thead><tr><th>役職</th><th>人数</th><th>氏名</th></tr></thead><tbody>${rows}</tbody>`;
+      if (!currentReport.recorder) {
+        const instructor = grouped['児童指導員']?.[0];
+        if (instructor) {
+          currentReport.recorder = instructor;
+          document.getElementById('reportRecorder').value = instructor;
+        }
+      }
+    }
+
+    function renderTransportTables() {
+      const pickupTable = document.getElementById('pickupTable');
+      pickupTable.innerHTML = buildTransportTable('pickup');
+      const dropoffTable = document.getElementById('dropoffTable');
+      dropoffTable.innerHTML = buildTransportTable('dropoff');
+      pickupTable.querySelectorAll('input, textarea').forEach(el => el.onchange = handleTransportChange('pickup'));
+      dropoffTable.querySelectorAll('input, textarea').forEach(el => el.onchange = handleTransportChange('dropoff'));
+    }
+
+    function buildTransportTable(kind) {
+      const rows = currentReport.transport[kind].map((row, index) => `
+        <tr>
+          <td>${row.car}</td>
+          <td><input class="input" data-kind="${kind}" data-index="${index}" data-field="leader" value="${row.leader}"></td>
+          <td><input type="time" class="input" data-kind="${kind}" data-index="${index}" data-field="time" value="${row.time}"></td>
+          <td><input class="input" data-kind="${kind}" data-index="${index}" data-field="place" value="${row.place}" placeholder="迎え先/送り先"></td>
+          <td><textarea data-kind="${kind}" data-index="${index}" data-field="children">${row.children}</textarea></td>
+          <td><input class="input" data-kind="${kind}" data-index="${index}" data-field="memo" value="${row.memo}"></td>
+        </tr>
+      `).join('');
+      return `<thead><tr><th>車両</th><th>担当者</th><th>時刻</th><th>迎え先/送り先</th><th>対象児童</th><th>備考</th></tr></thead><tbody>${rows}</tbody>`;
+    }
+
+    function handleTransportChange(kind) {
+      return (event) => {
+        const index = Number(event.target.dataset.index);
+        const field = event.target.dataset.field;
+        currentReport.transport[kind][index][field] = event.target.value;
+      };
+    }
+
+    function applyPickupTimes() {
+      if (currentReport.mode !== 'weekday') return alert('平日モードでのみ適用されます');
+      currentReport.transport.pickup.forEach(row => {
+        if (!row.time || !row.children) return;
+        const baseMinutes = timeToMinutes(row.time) + 10;
+        const appliedTime = minutesToTime(Math.min(baseMinutes, timeToMinutes('15:50')));
+        const childrenNames = row.children.split(/[、,\n]/).map(s=>s.trim()).filter(Boolean);
+        childrenNames.forEach(name => {
+          const child = currentReport.children.find(c=>c.name===name);
+          if (child) child.start = appliedTime;
+        });
+      });
+      renderChildren();
+      updateCounts();
+    }
+
+    function timeToMinutes(time) {
+      const [h,m] = time.split(':').map(Number);
+      return h*60 + m;
+    }
+    function minutesToTime(mins) {
+      const h = Math.floor(mins/60);
+      const m = mins%60;
+      return `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}`;
+    }
+
+    function renderSupportTable() {
+      const table = document.getElementById('supportTable');
+      const headers = ['名前','実施','開始','終了','上限回数','今月実施日','内容','実施者'];
+      const tbody = currentReport.supportItems.map((item, index) => `
+        <tr>
+          <td>${item.name}<div class="muted">12 パターンの内容をプルダウンで選択</div></td>
+          <td><input type="checkbox" data-index="${index}" data-field="execute" ${item.execute?'checked':''}></td>
+          <td><input type="time" class="input" data-index="${index}" data-field="start" value="${item.start}"></td>
+          <td><input type="time" class="input" data-index="${index}" data-field="end" value="${item.end}"></td>
+          <td><input class="input" data-index="${index}" data-field="limit" value="${item.limit}"></td>
+          <td><input class="input" data-index="${index}" data-field="monthly" value="${item.monthly}"></td>
+          <td><select class="input" data-index="${index}" data-field="content">${supportContents.map(opt=>`<option ${item.content===opt?'selected':''}>${opt}</option>`).join('')}</select></td>
+          <td><input class="input" data-index="${index}" data-field="practitioner" value="${item.practitioner}"></td>
+        </tr>
+      `).join('');
+      table.innerHTML = `<thead><tr>${headers.map(h=>`<th>${h}</th>`).join('')}</tr></thead><tbody>${tbody}</tbody>`;
+      table.querySelectorAll('input, select').forEach(el => {
+        el.onchange = (event) => {
+          const index = Number(event.target.dataset.index);
+          const field = event.target.dataset.field;
+          currentReport.supportItems[index][field] = event.target.type === 'checkbox' ? event.target.checked : event.target.value;
+        };
+      });
+    }
+
+    function applySupportDefaults() {
+      currentReport.supportItems.forEach(item => {
+        if (currentReport.mode === 'holiday') {
+          item.start = '11:00';
+          item.end = '11:30';
+        } else {
+          item.start = '16:00';
+          item.end = '16:30';
+        }
+      });
+      renderSupportTable();
+    }
+
+    function assignPractitioners() {
+      const grouped = {};
+      currentReport.staff.forEach(member => {
+        grouped[member.role] = grouped[member.role] || [];
+        grouped[member.role].push(member.name);
+      });
+      const mainPool = [...(grouped['保育士等（5年以上）']||[]), ...(grouped['理学療法士・作業療法士']||[])].slice(0,5);
+      const childInstructors = grouped['児童指導員'] || [];
+      let mainIndex = 0;
+      currentReport.supportItems.forEach(item => {
+        if (!item.execute) return;
+        if (mainPool.length) {
+          item.practitioner = mainPool[mainIndex % mainPool.length];
+          mainIndex++;
+        } else if (childInstructors.length >= 2) {
+          const target = mainIndex < 2 ? childInstructors[0] : childInstructors[1];
+          item.practitioner = target;
+          mainIndex++;
+        } else if (childInstructors.length) {
+          item.practitioner = childInstructors[0];
+        }
+      });
+      renderSupportTable();
+    }
+
+    async function fetchWeather(dateStr) {
+      try {
+        const response = await fetch('https://api.open-meteo.com/v1/forecast?latitude=35.8569&longitude=139.6489&daily=weathercode&timezone=Asia/Tokyo');
+        const data = await response.json();
+        const index = data.daily.time.indexOf(dateStr);
+        const code = index >=0 ? data.daily.weathercode[index] : null;
+        const weather = mapWeather(code);
+        currentReport.weather = weather;
+        document.getElementById('reportWeather').value = weather;
+      } catch (e) {
+        currentReport.weather = '取得失敗';
+        document.getElementById('reportWeather').value = '取得失敗';
+      }
+    }
+
+    function mapWeather(code) {
+      if (code === null || code === undefined) return '不明';
+      if ([0,1].includes(code)) return '晴';
+      if ([2,3].includes(code)) return '曇';
+      if ([45,48,51,53,55,56,57,61,63,65,80,81,82].includes(code)) return '雨';
+      if ([71,73,75,77].includes(code)) return '雪';
+      return '不明';
+    }
+
+    function resetFromMaster() {
+      const dateStr = formatDate(currentDate);
+      currentReport.children = officeMaster.find(o=>o.id===currentOfficeId).children.map(child => ({
+        id: `${child.name}-${dateStr}`,
+        name: child.name,
+        school: child.school,
+        grade: child.grade,
+        absent: false,
+        cancel: false,
+        service: '1',
+        start: currentReport.mode === 'holiday' ? '09:50' : '15:30',
+        end: currentReport.mode === 'holiday' ? '16:00' : '17:30',
+        pickup: false,
+        dropoff: false,
+        notes: currentReport.mode === 'holiday' ? '延長支援加算＋60分' : '',
+        familySupport: '無',
+        proSupport: '無'
+      }));
+      currentReport.supportItems = buildSupportItems(currentReport.children);
+      renderChildren();
+      updateCounts();
+      applySupportDefaults();
+    }
+
+    function addChildRow() {
+      currentReport.children.push({
+        id: `child-${Date.now()}`,
+        name: officeMaster.find(o=>o.id===currentOfficeId).children[0].name,
+        school: officeMaster.find(o=>o.id===currentOfficeId).children[0].school,
+        grade: officeMaster.find(o=>o.id===currentOfficeId).children[0].grade,
+        absent: false,
+        cancel: false,
+        service: '1',
+        start: currentReport.mode === 'holiday' ? '09:50' : '15:30',
+        end: currentReport.mode === 'holiday' ? '16:00' : '17:30',
+        pickup: false,
+        dropoff: false,
+        notes: '',
+        familySupport: '無',
+        proSupport: '無'
+      });
+      currentReport.supportItems = buildSupportItems(currentReport.children);
+      renderChildren();
+      updateCounts();
+      applySupportDefaults();
+    }
+
+    function updateMode() {
+      currentReport.mode = document.getElementById('holidayToggle').checked ? 'holiday' : 'weekday';
+      currentReport.children.forEach(child => {
+        if (currentReport.mode === 'holiday') {
+          child.start = '09:50';
+          child.end = '16:00';
+          child.notes = '延長支援加算＋60分';
+        } else {
+          child.start = '15:30';
+          child.end = '17:30';
+          if (child.notes === '延長支援加算＋60分') child.notes = '';
+        }
+      });
+      applySupportDefaults();
+      renderChildren();
+      updateCounts();
+    }
+
+    function buildSupportItems(children) {
+      return children.map(child => ({
+        name: child.name,
+        execute: false,
+        start: currentReport && currentReport.mode === 'holiday' ? '11:00' : '16:00',
+        end: currentReport && currentReport.mode === 'holiday' ? '11:30' : '16:30',
+        limit: '1/日',
+        monthly: '',
+        content: supportContents[0],
+        practitioner: ''
+      }));
+    }
+
+    document.getElementById('backToTop').onclick = () => {
+      document.getElementById('calendar-section').classList.add('hidden');
+      document.getElementById('report-section').classList.add('hidden');
+      document.getElementById('office-list').classList.remove('hidden');
+    };
+    document.getElementById('backToCalendar').onclick = () => {
+      document.getElementById('report-section').classList.add('hidden');
+      document.getElementById('calendar-section').classList.remove('hidden');
+    };
+    document.getElementById('prevMonth').onclick = () => { currentMonth.setMonth(currentMonth.getMonth()-1); renderCalendar(); };
+    document.getElementById('nextMonth').onclick = () => { currentMonth.setMonth(currentMonth.getMonth()+1); renderCalendar(); };
+    document.getElementById('saveReport').onclick = () => {
+      currentReport.manager = document.getElementById('reportManager').value;
+      currentReport.recorder = document.getElementById('reportRecorder').value;
+      currentReport.amNotes = document.getElementById('amNotes').value;
+      currentReport.pmNotes = document.getElementById('pmNotes').value;
+      currentReport.specialNotes = document.getElementById('specialNotes').value;
+      currentReport.supportDetails = document.getElementById('supportDetails').value;
+      saveReportToStorage();
+    };
+    document.getElementById('holidayToggle').onchange = updateMode;
+    document.getElementById('addChildRow').onclick = addChildRow;
+    document.getElementById('resetFromMaster').onclick = resetFromMaster;
+    document.getElementById('applyPickup').onclick = applyPickupTimes;
+    document.getElementById('applyPractitioner').onclick = assignPractitioners;
+    document.getElementById('refreshShifts').onclick = () => {
+      currentReport.staff = buildStaffFromShift(currentReport.date);
+      renderStaff();
+    };
+
+    initOffices();
+  </script>
+</body>
+</html>
